@@ -131,7 +131,7 @@ def scan_local_network():
 
 # Function to display scan options
 def display_scan_options():
-    table = Table(title="🐆 Choose a Scan Type 🐆", title_style="bold yellow", style="cyan")
+    table = Table(title="🐆 Choose a Scan Type 🐆", title_style="bold yellow", style="tan")
     table.add_column("Option", style="bold white", justify="center")
     table.add_column("Description", style="bold white")
     
