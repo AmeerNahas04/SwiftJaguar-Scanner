@@ -2,6 +2,7 @@ import nmap  # This is the scanning tool
 import socket  # Provides low-level networking capabilities
 import os  # For executing system commands
 import platform  # To check the platform
+import json # Saves/views scan results
 from rich.console import Console  # Allows the cool style in terminal
 from rich.panel import Panel  # Creates fancy terminal boxes
 from rich.table import Table  # Creates structured terminal tables
@@ -45,7 +46,7 @@ common_ports = {
     8080: "HTTP Proxy"
 }
 
-# Getting the Local Network Range
+# Getting the Local Network 
 def get_local_network():
     """Detects the local network range (e.g., 192.168.1.0/24)."""
     try:
@@ -58,6 +59,7 @@ def get_local_network():
     except Exception as e:
         return f"Error: {e}"
 
+# Gets the router IP
 def get_router_ip():
     """Get the router's IP address (default gateway)."""
     system_platform = platform.system()
@@ -129,6 +131,13 @@ def scan_local_network():
         console.print(f"\n[bold green]🖥️ Device Found: {host}[/bold green]")
         scan_target(host)
 
+# Scanning the current device
+def scan_current_device():
+
+    local_ip = socket.gethostbyname(socket.gethostname())
+    scan_target(local_ip)
+
+
 # Function to display scan options
 def display_scan_options():
     table = Table(title="🐆 Choose a Scan Type 🐆", title_style="bold yellow", style="tan")
@@ -136,8 +145,10 @@ def display_scan_options():
     table.add_column("Description", style="bold white")
     
     table.add_row("[bold red]1[/bold red]", "Scan a specific target IP")
-    table.add_row("─" * 15, "─" * 40)
-    table.add_row("[bold red]2[/bold red]", "Scan the open/closed ports on your host")
+    table.add_row("─" * 15, "─" * 60)
+    table.add_row("[bold red]2[/bold red]", "Scan the open/closed ports on your router/connected network")
+    table.add_row("─" * 15, "─" * 60)
+    table.add_row("[bold red]3[/bold red]", "Scan current device")
     
     console.print(table)
 
@@ -153,5 +164,9 @@ if __name__ == "__main__":
     elif choice == "2":
         scan_local_network()
 
+    elif choice == "3":
+        scan_current_device()
+
     else:
         console.print("[bold red]❌ Cmon, you have two choices... for now :)[/bold red]")
+
