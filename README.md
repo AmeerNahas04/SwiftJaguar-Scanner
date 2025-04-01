@@ -10,6 +10,10 @@ SwiftJaguar's Swift Vulnerability Scanner is a portable and efficient security t
 
 🛡 Fast and lightweight - Optimized for speed and portability.
 
+👀 Current device scanning - Will scan open ports on the current machine.
+
+👣 Target IP scanning - Scans for open ports on whatever IP given.
+
 🔎 Automated scanning - Identifies open ports on the current connected network.
 
 🕵️ Common vulnerability detection - Detects commonly exposed ports.
