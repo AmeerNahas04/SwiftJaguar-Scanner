@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-# SwiftJaguar-Scanner
-=======
-# Swifty-Scanner
-SwiftJaguar's Swifty Vulnerability Scanner
-
 A lightweight and powerful vulnerability scanner for network security assessments.
 
 🚀 About Swifty Scanner
@@ -65,4 +59,3 @@ This project is licensed under the MIT License. See LICENSE for details.
 
 🖥️ Developed by Ameer Nahas | 🚀 Stay secure, stay swift! 🐆
 
->>>>>>> 92637e7f59289a5f689fbfcfccb39420cd6ee347
