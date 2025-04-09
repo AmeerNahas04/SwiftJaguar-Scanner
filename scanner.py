@@ -1,12 +1,16 @@
-import nmap  # This is the scanning tool
+import nmap  # type: ignore     # This is the scanning tool
 import socket  # Provides low-level networking capabilities
 import os  # For executing system commands
 import platform  # To check the platform
 import json # Saves/views scan results
-from rich.console import Console  # Allows the cool style in terminal
-from rich.panel import Panel  # Creates fancy terminal boxes
-from rich.table import Table  # Creates structured terminal tables
-from rich.progress import Progress, SpinnerColumn, TextColumn  # Adds a loading spinner
+import requests # type: ignore      # For geolocation API
+import ipaddress
+from rich.console import Console  # type: ignore        # Allows the cool style in terminal
+from rich.panel import Panel  # type: ignore        # Creates fancy terminal boxes
+from rich.table import Table  # type: ignore        # Creates structured terminal tables
+from rich.progress import Progress, SpinnerColumn, TextColumn       # type: ignore # Adds a loading spinner
+from rich import box # type: ignore
+
 
 # Check if nmap is installed
 try:
@@ -89,6 +93,42 @@ def get_router_ip():
 
     return None  # If the default gateway cannot be found
 
+
+def geo_lookup(ip):
+    """Gets geolocation info for a given IP if it's public."""
+    try:
+        # Skip private addresses
+        if ipaddress.ip_address(ip).is_private:
+            console.print("[bold yellow]Skipping geolocation: Private IP address[/bold yellow]")
+            return
+
+        # Fetch from ip‑api.com
+        response = requests.get(f"http://ip-api.com/json/{ip}", timeout=5)
+        data = response.json()
+
+        if data.get("status") != "success":
+            msg = data.get("message", "Unknown error")
+            console.print(f"[bold red]Geolocation lookup failed:[/bold red] {msg}")
+            return
+
+        # Build and print a simple table
+        table = Table(title=f"🌐 Geolocation for {ip}", title_style="bold cyan")
+        table.add_column("Field", style="bold green")
+        table.add_column("Value", style="white")
+
+        table.add_row("City", data.get("city", "—"))
+        table.add_row("Region", data.get("regionName", "—"))
+        table.add_row("Country", data.get("country", "—"))
+        table.add_row("ISP", data.get("isp", "—"))
+        table.add_row("Org", data.get("org", "—"))
+
+        console.print(table)
+
+    except Exception as e:
+        console.print(f"[bold red]Error fetching geolocation:[/bold red] {e}")
+
+
+
 # Scanning a Single Target
 def scan_target(target):
     """Scans a given target IP for common vulnerable ports."""
@@ -102,6 +142,9 @@ def scan_target(target):
 
     for host in scanner.all_hosts():
         console.print(f"[bold green]Results for {host}:[/bold green]")
+        
+        geo_lookup(host)
+
         if 'tcp' in scanner[host]:
             for port in common_ports.keys():
                 if port in scanner[host]['tcp']:
@@ -111,11 +154,10 @@ def scan_target(target):
                         console.print(f"[bold red]⚠️ Port {port} ({service}) is OPEN! ⚠️[/bold red]")
                     else:
                         console.print(f"[bold green]✔️ Port {port} ({service}) is CLOSED! Good job ✔️[/bold green]")
-                        
-
+ 
 # Scanning the Whole Network
-def scan_local_network():
-    """Scans all devices on the local network for common vulnerable ports."""
+def scan_local_device():
+    """Scans your devics on the local network for common vulnerable ports."""
     router_ip = get_router_ip()
     if router_ip is None:
         console.print("[bold red]Error: Could not detect the router IP.[/bold red]")
@@ -127,9 +169,6 @@ def scan_local_network():
     scanner = nmap.PortScanner()
     scanner.scan(hosts=network_range, arguments="-sn")
 
-    for host in scanner.all_hosts():
-        console.print(f"\n[bold green]🖥️ Device Found: {host}[/bold green]")
-        scan_target(host)
 
 # Scanning the current device
 def scan_current_device():
@@ -162,11 +201,11 @@ if __name__ == "__main__":
         scan_target(target_ip)
 
     elif choice == "2":
-        scan_local_network()
+        scan_local_device()
 
     elif choice == "3":
         scan_current_device()
 
     else:
-        console.print("[bold red]❌ Cmon, you have two choices... for now :)[/bold red]")
+        console.print("[bold red]❌ Cmon, you have three choices... for now :)[/bold red]")
 
