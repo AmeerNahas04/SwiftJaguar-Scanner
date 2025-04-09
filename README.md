@@ -1,4 +1,3 @@
-SwiftJaguar's Swifty Vulnerability Scanner
 
 A lightweight and powerful vulnerability scanner for network security assessments.
 

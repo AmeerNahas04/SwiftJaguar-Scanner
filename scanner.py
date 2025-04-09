@@ -93,7 +93,6 @@ def get_router_ip():
 
     return None  # If the default gateway cannot be found
 
-
 def geo_lookup(ip):
     """Gets geolocation info for a given IP if it's public."""
     try:
