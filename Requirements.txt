@@ -1,2 +1,4 @@
-python-nmap
-rich
+python-nmap==0.7.1
+requests==2.31.0
+rich==13.7.0
+ipaddress==1.0.23
