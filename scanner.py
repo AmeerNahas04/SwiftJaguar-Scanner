@@ -5,12 +5,18 @@ import platform  # To check the platform
 import json # Saves/views scan results
 import requests # type: ignore      # For geolocation API
 import ipaddress
+import datetime
+from pathlib import Path
 from rich.console import Console  # type: ignore        # Allows the cool style in terminal
 from rich.panel import Panel  # type: ignore        # Creates fancy terminal boxes
 from rich.table import Table  # type: ignore        # Creates structured terminal tables
 from rich.progress import Progress, SpinnerColumn, TextColumn       # type: ignore # Adds a loading spinner
 from rich import box # type: ignore
+from typing import Dict, Any
 
+# Create results directory if it doesn't exist
+RESULTS_DIR = Path("scan_results")
+RESULTS_DIR.mkdir(exist_ok=True)
 
 # Check if nmap is installed
 try:
@@ -46,9 +52,56 @@ common_ports = {
     139: "NetBIOS (Windows File Sharing)",
     143: "IMAP (Email Protocol)",
     445: "SMB (Windows File Sharing)",
+    1433: "MSSQL (Microsoft SQL Server)",
+    1521: "Oracle Database",
+    3306: "MySQL/MariaDB",
     3389: "RDP (Remote Desktop Protocol)",
-    8080: "HTTP Proxy"
+    5432: "PostgreSQL",
+    6379: "Redis",
+    8080: "HTTP Proxy",
+    27017: "MongoDB",
+    11211: "Memcached",
+    9200: "Elasticsearch"
 }
+
+# Known vulnerable service versions
+VULNERABLE_VERSIONS = {
+    'OpenSSH': ['7.2p1', '7.2', '7.1p1', '7.1'],
+    'ProFTPD': ['1.3.5'],
+    'Apache': ['2.4.49', '2.4.48', '2.4.47'],
+    'Nginx': ['1.16.1', '1.16.0'],
+    'MySQL': ['5.6.', '5.5.'],
+    'Redis': ['4.0.', '3.2.'],
+}
+
+def check_version_vulnerability(service: str, version: str) -> str:
+    """Check if a service version is known to be vulnerable."""
+    for service_name, vulnerable_versions in VULNERABLE_VERSIONS.items():
+        if service_name.lower() in service.lower():
+            for vuln_version in vulnerable_versions:
+                if version.startswith(vuln_version):
+                    return f"⚠️ Known vulnerable version {version} of {service_name}"
+    return ""
+
+class RateLimiter:
+    def __init__(self, max_requests: int = 100, time_window: int = 60):
+        self.max_requests = max_requests
+        self.time_window = time_window
+        self.requests = []
+
+    def add_request(self):
+        current_time = datetime.datetime.now()
+        # Remove old requests
+        self.requests = [req_time for req_time in self.requests 
+                        if (current_time - req_time).seconds <= self.time_window]
+        
+        if len(self.requests) >= self.max_requests:
+            raise Exception(f"Rate limit exceeded. Maximum {self.max_requests} requests per {self.time_window} seconds.")
+        
+        self.requests.append(current_time)
+
+# Create a rate limiter instance
+rate_limiter = RateLimiter()
 
 # Getting the Local Network 
 def get_local_network():
@@ -126,34 +179,99 @@ def geo_lookup(ip):
     except Exception as e:
         console.print(f"[bold red]Error fetching geolocation:[/bold red] {e}")
 
+def save_scan_results(target: str, results: Dict[str, Any]) -> None:
+    """Save scan results to a JSON file."""
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = RESULTS_DIR / f"scan_{target}_{timestamp}.json"
+    
+    with open(filename, 'w') as f:
+        json.dump(results, f, indent=4)
+    console.print(f"[bold green]Results saved to: {filename}[/bold green]")
 
-
-# Scanning a Single Target
 def scan_target(target):
     """Scans a given target IP for common vulnerable ports."""
+    try:
+        rate_limiter.add_request()
+    except Exception as e:
+        console.print(f"[bold red]{str(e)}[/bold red]")
+        return None
+
     console.print(f"[bold red]Scanning {target} for vulnerable ports 👀...[/bold red] [bold yellow]Continuing...[/bold yellow]")
 
     scanner = nmap.PortScanner()
+    scan_results = {}
+    
     with Progress(SpinnerColumn(), TextColumn("[yellow]Scanning...")) as progress:
         task = progress.add_task("", total=None)
-        scanner.scan(target, ",".join(str(port) for port in common_ports.keys()))
+        # Enhanced scan with version detection (-sV) and OS detection (-O)
+        scanner.scan(target, 
+                    ",".join(str(port) for port in common_ports.keys()),
+                    arguments="-sV -O --version-intensity 5")
         progress.stop()
 
     for host in scanner.all_hosts():
         console.print(f"[bold green]Results for {host}:[/bold green]")
+        scan_results[host] = {
+            "ports": {},
+            "os": {},
+            "geolocation": {},
+            "vulnerabilities": []
+        }
         
-        geo_lookup(host)
+        # Get OS information if available
+        if 'osmatch' in scanner[host]:
+            os_matches = scanner[host]['osmatch']
+            if os_matches:
+                scan_results[host]['os'] = os_matches[0]
+                console.print(f"[bold blue]Detected OS: {os_matches[0]['name']} (Accuracy: {os_matches[0]['accuracy']}%)[/bold blue]")
+
+        # Get geolocation info
+        try:
+            geo_info = geo_lookup(host)
+            if geo_info:
+                scan_results[host]['geolocation'] = geo_info
+        except Exception as e:
+            console.print(f"[bold red]Error getting geolocation: {e}[/bold red]")
 
         if 'tcp' in scanner[host]:
             for port in common_ports.keys():
                 if port in scanner[host]['tcp']:
-                    state = scanner[host]['tcp'][port]['state']
+                    port_info = scanner[host]['tcp'][port]
+                    state = port_info['state']
                     service = common_ports[port]
+                    product = port_info.get('product', '')
+                    version = port_info.get('version', '')
+                    
+                    # Store port information
+                    scan_results[host]['ports'][port] = {
+                        'state': state,
+                        'service': service,
+                        'version': version,
+                        'product': product
+                    }
+                    
                     if state == "open":
-                        console.print(f"[bold red]⚠️ Port {port} ({service}) is OPEN! ⚠️[/bold red]")
+                        version_info = f" ({product} {version})" if product else ""
+                        console.print(f"[bold red]⚠️ Port {port} ({service}){version_info} is OPEN! ⚠️[/bold red]")
+                        
+                        # Check for known vulnerable versions
+                        if product and version:
+                            vuln_info = check_version_vulnerability(product, version)
+                            if vuln_info:
+                                console.print(f"[bold red]{vuln_info}[/bold red]")
+                                scan_results[host]['vulnerabilities'].append({
+                                    'port': port,
+                                    'service': service,
+                                    'version': version,
+                                    'description': vuln_info
+                                })
                     else:
                         console.print(f"[bold green]✔️ Port {port} ({service}) is CLOSED! Good job ✔️[/bold green]")
- 
+
+    # Save results to file
+    save_scan_results(target, scan_results)
+    return scan_results
+
 # Scanning the Whole Network
 def scan_local_device():
     """Scans your devics on the local network for common vulnerable ports."""
